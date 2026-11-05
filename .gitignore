@@ -1,0 +1,28 @@
+# Build / Gradle
+*.apk
+*.aab
+*.ap_
+*.dex
+bin/
+gen/
+out/
+build/
+.gradle/
+.cxx/
+.externalNativeBuild/
+.kotlin/
+
+# IDE / Android Studio
+*.iml
+.idea/
+.DS_Store
+captures/
+output-metadata.json
+
+# Local SDK path (cada desenvolvedor tem o seu)
+local.properties
+
+# Assinaturas e segredos (nunca commitar)
+*.jks
+*.keystore
+keystore.properties
