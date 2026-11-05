@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true">
+
+        <!-- A activity principal (MainActivity, Compose) será adicionada
+             na issue #7 — UI Initial structure (Jetpack Compose). -->
+
+    </application>
+
+</manifest>
