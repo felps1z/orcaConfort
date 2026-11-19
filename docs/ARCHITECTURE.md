@@ -125,7 +125,7 @@ Regras práticas:
 
 **Notas do build (AGP 9):**
 
-- O projeto usa **AGP 9.5 + Gradle 9.6 + JDK 17**. Desde o AGP 9.0 o Kotlin é compilado nativamente (*built-in Kotlin*): por isso **não existe o plugin `kotlin-android`** nos build files — isso é esperado. A versão do Kotlin (2.4.21) é fixada no `build.gradle.kts` raiz, via `buildscript`.
+- O projeto usa **AGP 9.3 + Gradle 9.6 + JDK 17**. Desde o AGP 9.0 o Kotlin é compilado nativamente (*built-in Kotlin*): por isso **não existe o plugin `kotlin-android`** nos build files — isso é esperado. A versão do Kotlin (2.4.21) é fixada no `build.gradle.kts` raiz, via `buildscript`.
 - O Compose usa o plugin `org.jetbrains.kotlin.plugin.compose` (versão acompanhando a do Kotlin).
 - `compileSdk = 37` (Android 17): exigência das dependências atuais do AndroidX (ex.: `core-ktx 1.19.1`).
 

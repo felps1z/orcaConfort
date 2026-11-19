@@ -4,7 +4,7 @@
 # Documentação: docs/ARCHITECTURE.md — seção 5.
 
 [versions]
-# Build (compatibilidade: AGP 9.5 exige Gradle >= 9.6.0 e JDK 17;
+# Build (compatibilidade: AGP 9.3 exige Gradle >= 9.6.0 e JDK 17;
 # Hilt >= 2.59 exige AGP >= 9.0 — ver release notes do Dagger)
 agp = "9.5.1"
 kotlin = "2.4.21"
