@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Diretório temporário de PDFs gerados para compartilhamento seguro via FileProvider -->
+    <cache-path
+        name="orcamentos_pdf"
+        path="orcamentos/" />
+</paths>
