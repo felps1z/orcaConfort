@@ -13,22 +13,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.orcaconfort.app.ui.components.AppIcons
 import com.orcaconfort.app.ui.components.HomeTopHeader
 import com.orcaconfort.app.ui.components.StatusBadge
 import com.orcaconfort.app.ui.theme.BackgroundGray
@@ -40,76 +48,86 @@ import com.orcaconfort.app.ui.theme.SurfaceWhite
 import com.orcaconfort.app.ui.theme.TextPrimary
 import com.orcaconfort.app.ui.theme.TextSecondary
 
-data class OrcamentoResumoUi(
-    val id: String,
-    val clienteNome: String,
-    val status: String,
-    val dataEntrega: String,
-    val subtituloModeloServico: String,
-    val valorFormatado: String
-)
-
-private val orcamentosMock = listOf(
-    OrcamentoResumoUi(
-        id = "024",
-        clienteNome = "Ana Souza",
-        status = "Pendente",
-        dataEntrega = "20/11/2026",
-        subtituloModeloServico = "Retrátil • Reforma",
-        valorFormatado = "R$ 1.850,00"
-    ),
-    OrcamentoResumoUi(
-        id = "023",
-        clienteNome = "Carlos Lima",
-        status = "Aprovado",
-        dataEntrega = "24/11/2026",
-        subtituloModeloServico = "Fixo • Sofá novo",
-        valorFormatado = "R$ 2.400,00"
-    ),
-    OrcamentoResumoUi(
-        id = "022",
-        clienteNome = "Marina Costa",
-        status = "Produção",
-        dataEntrega = "12/11/2026",
-        subtituloModeloServico = "Modular • Sofá novo",
-        valorFormatado = "R$ 4.650,00"
-    ),
-    OrcamentoResumoUi(
-        id = "021",
-        clienteNome = "Paulo Alves",
-        status = "Concluído",
-        dataEntrega = "02/11/2026",
-        subtituloModeloServico = "Fixo • Reforma",
-        valorFormatado = "R$ 1.320,00"
-    )
-)
-
 @Composable
 fun HistoricoScreen(
     onNavigateToTabelaPrecos: () -> Unit,
+    onNavigateToPerfil: () -> Unit,
     onNavigateToNovoOrcamento: () -> Unit,
-    onDetalhesClick: (OrcamentoResumoUi) -> Unit = { onNavigateToNovoOrcamento() }
+    onDetalhesClick: (Long) -> Unit,
+    viewModel: HistoricoViewModel = hiltViewModel(),
+) {
+    val orcamentos by viewModel.orcamentos.collectAsState()
+
+    HistoricoScreenContent(
+        orcamentos = orcamentos,
+        onNavigateToTabelaPrecos = onNavigateToTabelaPrecos,
+        onNavigateToPerfil = onNavigateToPerfil,
+        onNavigateToNovoOrcamento = onNavigateToNovoOrcamento,
+        onDetalhesClick = onDetalhesClick,
+    )
+}
+
+@Composable
+fun HistoricoScreenContent(
+    orcamentos: List<OrcamentoResumoUi>,
+    onNavigateToTabelaPrecos: () -> Unit,
+    onNavigateToPerfil: () -> Unit,
+    onNavigateToNovoOrcamento: () -> Unit,
+    onDetalhesClick: (Long) -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundGray)
+            .background(BackgroundGray),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            HomeTopHeader()
+            HomeTopHeader(
+                trailingContent = {
+                    Surface(
+                        onClick = onNavigateToPerfil,
+                        shape = RoundedCornerShape(6.dp),
+                        color = SurfaceWhite,
+                        border = BorderStroke(1.dp, BorderGray),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = AppIcons.Profile,
+                                contentDescription = "Perfil da tapeçaria",
+                                tint = PrimaryBlack,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Perfil",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary,
+                            )
+                        }
+                    }
+                },
+            )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                val contagemTexto = if (orcamentos.size == 1) {
+                    "1 orçamento"
+                } else {
+                    "${orcamentos.size} orçamentos"
+                }
                 Text(
-                    text = "${orcamentosMock.size} orçamentos",
+                    text = contagemTexto,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
                 )
                 Text(
                     text = "Tabela de Preços",
@@ -117,22 +135,30 @@ fun HistoricoScreen(
                     fontWeight = FontWeight.SemiBold,
                     color = TextPrimary,
                     textDecoration = TextDecoration.Underline,
-                    modifier = Modifier.clickable { onNavigateToTabelaPrecos() }
+                    modifier = Modifier.clickable { onNavigateToTabelaPrecos() },
                 )
             }
 
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 92.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(orcamentosMock, key = { it.id }) { item ->
-                    OrcamentoCard(
-                        item = item,
-                        onDetalhesClick = { onDetalhesClick(item) }
-                    )
+            if (orcamentos.isEmpty()) {
+                EstadoVazioHistorico(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 92.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(orcamentos, key = { it.id }) { item ->
+                        OrcamentoCard(
+                            item = item,
+                            onDetalhesClick = { onDetalhesClick(item.id) },
+                        )
+                    }
                 }
             }
         }
@@ -142,18 +168,50 @@ fun HistoricoScreen(
             shape = RoundedCornerShape(6.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrimaryBlack,
-                contentColor = SurfaceWhite
+                contentColor = SurfaceWhite,
             ),
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 16.dp, bottom = 16.dp)
-                .height(48.dp)
+                .height(48.dp),
         ) {
             Text(
                 text = "+ Novo Orçamento",
                 fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EstadoVazioHistorico(modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = SurfaceWhite,
+        border = BorderStroke(1.dp, BorderGray),
+        modifier = modifier,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = "Nenhum orçamento salvo",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+            )
+            Text(
+                text = "Toque em \"+ Novo Orçamento\" para criar seu primeiro cálculo e salvar no histórico.",
+                fontSize = 12.sp,
+                color = TextSecondary,
+                textAlign = TextAlign.Center,
+                lineHeight = 17.sp,
             )
         }
     }
@@ -162,29 +220,29 @@ fun HistoricoScreen(
 @Composable
 private fun OrcamentoCard(
     item: OrcamentoResumoUi,
-    onDetalhesClick: () -> Unit
+    onDetalhesClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = SurfaceWhite,
         border = BorderStroke(1.dp, BorderGray),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = item.clienteNome,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
                 )
                 StatusBadge(text = item.status)
             }
@@ -194,7 +252,7 @@ private fun OrcamentoCard(
             Text(
                 text = "Entrega: ${item.dataEntrega}",
                 fontSize = 12.sp,
-                color = TextSecondary
+                color = TextSecondary,
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -202,20 +260,20 @@ private fun OrcamentoCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
+                verticalAlignment = Alignment.Bottom,
             ) {
                 Column {
                     Text(
                         text = item.subtituloModeloServico,
                         fontSize = 12.sp,
-                        color = TextSecondary
+                        color = TextSecondary,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = item.valorFormatado,
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = TextPrimary,
                     )
                 }
 
@@ -225,15 +283,15 @@ private fun OrcamentoCard(
                     border = BorderStroke(1.dp, BorderDark),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = SurfaceWhite,
-                        contentColor = TextPrimary
+                        contentColor = TextPrimary,
                     ),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    modifier = Modifier.height(34.dp)
+                    modifier = Modifier.height(34.dp),
                 ) {
                     Text(
                         text = "Detalhes",
                         fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
             }
@@ -241,13 +299,35 @@ private fun OrcamentoCard(
     }
 }
 
+private val orcamentosPreview = listOf(
+    OrcamentoResumoUi(
+        id = 24L,
+        clienteNome = "Ana Souza",
+        status = "Pendente",
+        dataEntrega = "20/11/2026",
+        subtituloModeloServico = "Retrátil • Reforma",
+        valorFormatado = "R$ 1.850,00",
+    ),
+    OrcamentoResumoUi(
+        id = 23L,
+        clienteNome = "Carlos Lima",
+        status = "Aprovado",
+        dataEntrega = "24/11/2026",
+        subtituloModeloServico = "Fixo • Sofá Novo",
+        valorFormatado = "R$ 2.400,00",
+    ),
+)
+
 @Preview(showBackground = true, heightDp = 840)
 @Composable
 private fun HistoricoScreenPreview() {
     OrcaConfortTheme {
-        HistoricoScreen(
+        HistoricoScreenContent(
+            orcamentos = orcamentosPreview,
             onNavigateToTabelaPrecos = {},
-            onNavigateToNovoOrcamento = {}
+            onNavigateToPerfil = {},
+            onNavigateToNovoOrcamento = {},
+            onDetalhesClick = {},
         )
     }
 }

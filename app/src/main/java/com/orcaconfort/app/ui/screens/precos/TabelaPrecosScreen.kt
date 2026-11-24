@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -27,8 +27,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +40,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.orcaconfort.app.domain.model.CategoriaMaterial
 import com.orcaconfort.app.ui.components.AppIcons
 import com.orcaconfort.app.ui.components.OrcaTextField
 import com.orcaconfort.app.ui.components.ScreenTopBar
@@ -53,100 +56,55 @@ import com.orcaconfort.app.ui.theme.SurfaceWhite
 import com.orcaconfort.app.ui.theme.TextPrimary
 import com.orcaconfort.app.ui.theme.TextSecondary
 
-data class ItemPrecoUi(
-    val nome: String,
-    val atualizadoEm: String,
-    val precoUnidade: String
-)
-
-data class CategoriaPrecoUi(
-    val nome: String,
-    val itens: List<ItemPrecoUi>,
-    val expandidaInicialmente: Boolean = false
-)
-
-private val categoriasIniciais = listOf(
-    CategoriaPrecoUi(
-        nome = "Tecidos",
-        expandidaInicialmente = true,
-        itens = listOf(
-            ItemPrecoUi("Linho", "01/11/2026", "R$ 45,00 / m"),
-            ItemPrecoUi("Suede liso", "01/11/2026", "R$ 32,00 / m"),
-            ItemPrecoUi("Veludo", "01/11/2026", "R$ 58,00 / m")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Espumas",
-        itens = listOf(
-            ItemPrecoUi("Espuma 1cm", "01/11/2026", "R$ 6,00 / m"),
-            ItemPrecoUi("Espuma 2cm", "01/11/2026", "R$ 5,00 / m"),
-            ItemPrecoUi("Espuma 3cm", "01/11/2026", "R$ 5,00 / m")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Fibra",
-        itens = listOf(
-            ItemPrecoUi("Fibra siliconada", "01/11/2026", "R$ 28,00 / kg")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Percinta",
-        itens = listOf(
-            ItemPrecoUi("Percinta elástica", "01/11/2026", "R$ 6,00 / m")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Madeira",
-        itens = listOf(
-            ItemPrecoUi("Tábuas de eucalipto", "01/11/2026", "R$ 18,00 / m")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Folhas",
-        itens = listOf(
-            ItemPrecoUi("Chapa compensado", "01/11/2026", "R$ 65,00 / un")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Pés",
-        itens = listOf(
-            ItemPrecoUi("Pé de madeira", "01/11/2026", "R$ 15,00 / un")
-        )
-    ),
-    CategoriaPrecoUi(
-        nome = "Molas",
-        itens = listOf(
-            ItemPrecoUi("Mola espiral", "01/11/2026", "R$ 12,00 / un")
-        )
-    )
-)
-
 @Composable
 fun TabelaPrecosScreen(
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    viewModel: TabelaPrecosViewModel = hiltViewModel(),
 ) {
-    val categorias = remember { mutableStateListOf(*categoriasIniciais.toTypedArray()) }
+    val categorias by viewModel.categorias.collectAsState()
+
+    TabelaPrecosScreenContent(
+        categorias = categorias,
+        onBackClick = onBackClick,
+        onSalvarPreco = viewModel::atualizarPreco,
+        onAdicionarMaterial = viewModel::adicionarMaterial,
+    )
+}
+
+@Composable
+fun TabelaPrecosScreenContent(
+    categorias: List<CategoriaPrecoUi>,
+    onBackClick: () -> Unit,
+    onSalvarPreco: (materialId: Long, novoValorTexto: String) -> Unit,
+    onAdicionarMaterial: (categoria: CategoriaMaterial, nome: String, unidade: String, valorTexto: String) -> Unit,
+) {
     val expandidas = remember {
-        mutableStateListOf(*categoriasIniciais.map { it.expandidaInicialmente }.toTypedArray())
+        mutableStateMapOf(CategoriaMaterial.TECIDO to true)
     }
-    var itemEmEdicao by remember { mutableStateOf<Triple<Int, Int, ItemPrecoUi>?>(null) }
+
+    var itemEmEdicao by remember { mutableStateOf<ItemPrecoUi?>(null) }
     var textoPrecoEditado by remember { mutableStateOf("") }
+
+    var categoriaParaAdicionar by remember { mutableStateOf<CategoriaPrecoUi?>(null) }
+    var novoNomeMaterial by remember { mutableStateOf("") }
+    var novaUnidadeMaterial by remember { mutableStateOf("") }
+    var novoPrecoMaterial by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundGray)
+            .background(BackgroundGray),
     ) {
         ScreenTopBar(
             title = "Tabela de Preços",
             subtitle = "Valores unitários dos materiais",
-            onBackClick = onBackClick
+            onBackClick = onBackClick,
         )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             item {
                 Text(
@@ -154,26 +112,36 @@ fun TabelaPrecosScreen(
                     fontSize = 12.sp,
                     color = TextSecondary,
                     lineHeight = 16.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.padding(bottom = 4.dp),
                 )
             }
 
-            itemsIndexed(categorias) { catIndex, categoria ->
-                val expandida = expandidas[catIndex]
+            items(categorias, key = { it.categoria.name }) { categoria ->
+                val expandida = expandidas[categoria.categoria] == true
                 CategoriaAccordionCard(
                     categoria = categoria,
                     expandida = expandida,
-                    onToggleExpand = { expandidas[catIndex] = !expandida },
-                    onEditItem = { itemIndex, item ->
-                        textoPrecoEditado = item.precoUnidade
-                        itemEmEdicao = Triple(catIndex, itemIndex, item)
-                    }
+                    onToggleExpand = {
+                        expandidas[categoria.categoria] = !expandida
+                    },
+                    onEditItem = { item ->
+                        // Campo recebe apenas o valor numérico (sem a unidade de medida).
+                        textoPrecoEditado = item.valor
+                        itemEmEdicao = item
+                    },
+                    onAdicionarItemClick = {
+                        novoNomeMaterial = ""
+                        novaUnidadeMaterial = categoria.unidadePadrao
+                        novoPrecoMaterial = ""
+                        categoriaParaAdicionar = categoria
+                    },
                 )
             }
         }
     }
 
-    itemEmEdicao?.let { (catIndex, itemIndex, item) ->
+    // Diálogo de edição de preço unitário
+    itemEmEdicao?.let { item ->
         AlertDialog(
             onDismissRequest = { itemEmEdicao = null },
             containerColor = SurfaceWhite,
@@ -182,31 +150,33 @@ fun TabelaPrecosScreen(
                     text = "Editar preço — ${item.nome}",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
                 )
             },
             text = {
                 OrcaTextField(
-                    label = "Valor unitário",
+                    label = "Valor unitário (R$)",
                     value = textoPrecoEditado,
-                    onValueChange = { textoPrecoEditado = it },
-                    keyboardType = KeyboardType.Text
+                    onValueChange = { novoValor ->
+                        textoPrecoEditado = novoValor.filter { it.isDigit() || it == ',' || it == '.' }
+                    },
+                    keyboardType = KeyboardType.Decimal,
                 )
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        val catAtual = categorias[catIndex]
-                        val novosItens = catAtual.itens.toMutableList()
-                        novosItens[itemIndex] = item.copy(precoUnidade = textoPrecoEditado)
-                        categorias[catIndex] = catAtual.copy(itens = novosItens)
+                        val valorLimpo = textoPrecoEditado.trim()
+                        if (valorLimpo.isNotEmpty()) {
+                            onSalvarPreco(item.id, valorLimpo)
+                        }
                         itemEmEdicao = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = PrimaryBlack,
-                        contentColor = SurfaceWhite
+                        contentColor = SurfaceWhite,
                     ),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(6.dp),
                 ) {
                     Text("Salvar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 }
@@ -215,11 +185,87 @@ fun TabelaPrecosScreen(
                 OutlinedButton(
                     onClick = { itemEmEdicao = null },
                     border = BorderStroke(1.dp, BorderDark),
-                    shape = RoundedCornerShape(6.dp)
+                    shape = RoundedCornerShape(6.dp),
                 ) {
                     Text("Cancelar", fontSize = 13.sp, color = TextPrimary)
                 }
-            }
+            },
+        )
+    }
+
+    // Diálogo de cadastro de nova variação de material na categoria
+    categoriaParaAdicionar?.let { categoria ->
+        AlertDialog(
+            onDismissRequest = { categoriaParaAdicionar = null },
+            containerColor = SurfaceWhite,
+            title = {
+                Text(
+                    text = "Novo item — ${categoria.nome}",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OrcaTextField(
+                        label = "Nome do material",
+                        value = novoNomeMaterial,
+                        onValueChange = { novoNomeMaterial = it },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        OrcaTextField(
+                            label = "Valor (R$)",
+                            value = novoPrecoMaterial,
+                            onValueChange = { novoValor ->
+                                novoPrecoMaterial = novoValor.filter { it.isDigit() || it == ',' || it == '.' }
+                            },
+                            keyboardType = KeyboardType.Decimal,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OrcaTextField(
+                            label = "Unidade",
+                            value = novaUnidadeMaterial,
+                            onValueChange = { novaUnidadeMaterial = it },
+                            modifier = Modifier.width(96.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (novoNomeMaterial.isNotBlank() && novoPrecoMaterial.isNotBlank()) {
+                            onAdicionarMaterial(
+                                categoria.categoria,
+                                novoNomeMaterial,
+                                novaUnidadeMaterial,
+                                novoPrecoMaterial,
+                            )
+                            categoriaParaAdicionar = null
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryBlack,
+                        contentColor = SurfaceWhite,
+                    ),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text("Adicionar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { categoriaParaAdicionar = null },
+                    border = BorderStroke(1.dp, BorderDark),
+                    shape = RoundedCornerShape(6.dp),
+                ) {
+                    Text("Cancelar", fontSize = 13.sp, color = TextPrimary)
+                }
+            },
         )
     }
 }
@@ -229,13 +275,14 @@ private fun CategoriaAccordionCard(
     categoria: CategoriaPrecoUi,
     expandida: Boolean,
     onToggleExpand: () -> Unit,
-    onEditItem: (Int, ItemPrecoUi) -> Unit
+    onEditItem: (ItemPrecoUi) -> Unit,
+    onAdicionarItemClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(8.dp),
         color = SurfaceWhite,
         border = BorderStroke(1.dp, BorderGray),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
@@ -245,21 +292,26 @@ private fun CategoriaAccordionCard(
                     .clickable { onToggleExpand() }
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = categoria.nome,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = TextPrimary,
                     )
                     if (expandida) {
                         Spacer(modifier = Modifier.width(8.dp))
+                        val textoItens = if (categoria.itens.size == 1) {
+                            "1 item"
+                        } else {
+                            "${categoria.itens.size} itens"
+                        }
                         Text(
-                            text = "${categoria.itens.size} itens",
+                            text = textoItens,
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = TextSecondary,
                         )
                     }
                 }
@@ -267,7 +319,7 @@ private fun CategoriaAccordionCard(
                     imageVector = if (expandida) AppIcons.ChevronUp else AppIcons.ChevronDown,
                     contentDescription = if (expandida) "Recolher" else "Expandir",
                     tint = PrimaryBlack,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(16.dp),
                 )
             }
 
@@ -279,40 +331,40 @@ private fun CategoriaAccordionCard(
                             .fillMaxWidth()
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = item.nome,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary
+                                color = TextPrimary,
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "Atualizado em ${item.atualizadoEm}",
                                 fontSize = 11.sp,
-                                color = TextSecondary
+                                color = TextSecondary,
                             )
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = item.precoUnidade,
+                                text = item.precoFormatado,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = TextPrimary
+                                color = TextPrimary,
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             IconButton(
-                                onClick = { onEditItem(index, item) },
-                                modifier = Modifier.size(28.dp)
+                                onClick = { onEditItem(item) },
+                                modifier = Modifier.size(28.dp),
                             ) {
                                 Icon(
                                     imageVector = AppIcons.EditPencil,
                                     contentDescription = "Editar preço",
                                     tint = PrimaryBlack,
-                                    modifier = Modifier.size(15.dp)
+                                    modifier = Modifier.size(15.dp),
                                 )
                             }
                         }
@@ -321,15 +373,62 @@ private fun CategoriaAccordionCard(
                         HorizontalDivider(color = DividerLight, thickness = 1.dp)
                     }
                 }
+
+                HorizontalDivider(color = DividerLight, thickness = 1.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onAdicionarItemClick() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "+ Adicionar em ${categoria.nome}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextSecondary,
+                    )
+                }
             }
         }
     }
 }
 
+private val categoriasPreview = listOf(
+    CategoriaPrecoUi(
+        categoria = CategoriaMaterial.TECIDO,
+        nome = "Tecidos",
+        unidadePadrao = "m",
+        itens = listOf(
+            ItemPrecoUi(1L, "Linho", "01/11/2026", "45,00", "m"),
+            ItemPrecoUi(2L, "Suede liso", "01/11/2026", "32,00", "m"),
+            ItemPrecoUi(3L, "Veludo", "01/11/2026", "58,00", "m"),
+        ),
+    ),
+    CategoriaPrecoUi(
+        categoria = CategoriaMaterial.ESPUMA,
+        nome = "Espumas",
+        unidadePadrao = "m",
+        itens = listOf(
+            ItemPrecoUi(4L, "Espuma 1cm", "01/11/2026", "6,00", "m"),
+            ItemPrecoUi(5L, "Espuma 2cm", "01/11/2026", "5,00", "m"),
+            ItemPrecoUi(6L, "Espuma 3cm", "01/11/2026", "5,00", "m"),
+            ItemPrecoUi(7L, "Espuma 5cm", "01/11/2026", "12,00", "m"),
+            ItemPrecoUi(8L, "Espuma 10cm", "01/11/2026", "22,00", "m"),
+        ),
+    ),
+)
+
 @Preview(showBackground = true, heightDp = 840)
 @Composable
 private fun TabelaPrecosScreenPreview() {
     OrcaConfortTheme {
-        TabelaPrecosScreen(onBackClick = {})
+        TabelaPrecosScreenContent(
+            categorias = categoriasPreview,
+            onBackClick = {},
+            onSalvarPreco = { _, _ -> },
+            onAdicionarMaterial = { _, _, _, _ -> },
+        )
     }
 }
