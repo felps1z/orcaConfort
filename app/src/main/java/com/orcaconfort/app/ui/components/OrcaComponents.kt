@@ -189,12 +189,40 @@ object AppIcons {
             lineTo(4f, 12f)
         }.build()
     }
+    val Profile: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Profile",
+            defaultWidth = 20.dp,
+            defaultHeight = 20.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).path(
+            stroke = SolidColor(PrimaryBlack),
+            strokeLineWidth = 1.9f,
+            strokeLineCap = StrokeCap.Round,
+            strokeLineJoin = StrokeJoin.Round
+        ) {
+            moveTo(20f, 21f)
+            verticalLineTo(19f)
+            curveTo(20f, 16.8f, 18.2f, 15f, 16f, 15f)
+            horizontalLineTo(8f)
+            curveTo(5.8f, 15f, 4f, 16.8f, 4f, 19f)
+            verticalLineTo(21f)
+            moveTo(12f, 11f)
+            curveTo(14.2f, 11f, 16f, 9.2f, 16f, 7f)
+            curveTo(16f, 4.8f, 14.2f, 3f, 12f, 3f)
+            curveTo(9.8f, 3f, 8f, 4.8f, 8f, 7f)
+            curveTo(8f, 9.2f, 9.8f, 11f, 12f, 11f)
+            close()
+        }.build()
+    }
 }
 
 @Composable
 fun HomeTopHeader(
     title: String = "OrçaConfort",
-    subtitle: String = "Orçamentos de estofados"
+    subtitle: String = "Orçamentos de estofados",
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -205,28 +233,35 @@ fun HomeTopHeader(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_logo_estofados),
-                contentDescription = "Logo OrçaConfort",
-                tint = PrimaryBlack,
-                modifier = Modifier.size(width = 28.dp, height = 22.dp)
-            )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_logo_estofados),
+                    contentDescription = "Logo OrçaConfort",
+                    tint = PrimaryBlack,
+                    modifier = Modifier.size(width = 28.dp, height = 22.dp)
                 )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    fontSize = 12.sp,
-                    color = TextSecondary
-                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = title,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                }
+            }
+
+            if (trailingContent != null) {
+                trailingContent()
             }
         }
         HorizontalDivider(color = DividerLight, thickness = 1.dp)
@@ -366,6 +401,7 @@ fun OrcaTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    placeholder: String = "",
     suffix: String? = null,
     trailingIcon: @Composable (() -> Unit)? = null,
     singleLine: Boolean = true,
@@ -407,7 +443,17 @@ fun OrcaTextField(
                     ),
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
                     cursorBrush = SolidColor(PrimaryBlack),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { innerTextField ->
+                        if (value.isEmpty() && placeholder.isNotEmpty()) {
+                            Text(
+                                text = placeholder,
+                                fontSize = 14.sp,
+                                color = TextMuted
+                            )
+                        }
+                        innerTextField()
+                    }
                 )
                 if (suffix != null) {
                     Spacer(modifier = Modifier.width(6.dp))

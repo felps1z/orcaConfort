@@ -11,18 +11,26 @@ import androidx.navigation.navArgument
 import com.orcaconfort.app.ui.screens.detalhes.DetalhesOrcamentoScreen
 import com.orcaconfort.app.ui.screens.historico.HistoricoScreen
 import com.orcaconfort.app.ui.screens.orcamento.OrcamentoScreen
+import com.orcaconfort.app.ui.screens.perfil.PerfilTapeceiroScreen
 import com.orcaconfort.app.ui.screens.precos.TabelaPrecosScreen
 
 enum class Rotas(val rota: String) {
     HISTORICO("historico"),
     TABELA_PRECOS("tabela_precos"),
-    NOVO_ORCAMENTO("novo_orcamento"),
+    PERFIL_TAPECEIRO("perfil_tapeceiro"),
+    NOVO_ORCAMENTO("novo_orcamento?orcamentoId={orcamentoId}"),
     DETALHES_ORCAMENTO("detalhes_orcamento/{orcamentoId}");
 
     companion object {
         const val ARG_ORCAMENTO_ID = "orcamentoId"
+        const val ID_NOVO_ORCAMENTO = -1L
 
-        fun detalhesOrcamento(orcamentoId: String): String =
+        fun novoOrcamento(): String = "novo_orcamento"
+
+        fun editarOrcamento(orcamentoId: Long): String =
+            "novo_orcamento?$ARG_ORCAMENTO_ID=$orcamentoId"
+
+        fun detalhesOrcamento(orcamentoId: Long): String =
             "detalhes_orcamento/$orcamentoId"
     }
 }
@@ -42,11 +50,14 @@ fun OrcaConfortNavHost(
                 onNavigateToTabelaPrecos = {
                     navController.navigate(Rotas.TABELA_PRECOS.rota)
                 },
-                onNavigateToNovoOrcamento = {
-                    navController.navigate(Rotas.NOVO_ORCAMENTO.rota)
+                onNavigateToPerfil = {
+                    navController.navigate(Rotas.PERFIL_TAPECEIRO.rota)
                 },
-                onDetalhesClick = { orcamento ->
-                    navController.navigate(Rotas.detalhesOrcamento(orcamento.id))
+                onNavigateToNovoOrcamento = {
+                    navController.navigate(Rotas.novoOrcamento())
+                },
+                onDetalhesClick = { orcamentoId ->
+                    navController.navigate(Rotas.detalhesOrcamento(orcamentoId))
                 },
             )
         }
@@ -59,7 +70,23 @@ fun OrcaConfortNavHost(
             )
         }
 
-        composable(Rotas.NOVO_ORCAMENTO.rota) {
+        composable(Rotas.PERFIL_TAPECEIRO.rota) {
+            PerfilTapeceiroScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+            )
+        }
+
+        composable(
+            route = Rotas.NOVO_ORCAMENTO.rota,
+            arguments = listOf(
+                navArgument(Rotas.ARG_ORCAMENTO_ID) {
+                    type = NavType.LongType
+                    defaultValue = Rotas.ID_NOVO_ORCAMENTO
+                },
+            ),
+        ) {
             OrcamentoScreen(
                 onBackToHome = {
                     navController.popBackStack()
@@ -71,7 +98,7 @@ fun OrcaConfortNavHost(
             route = Rotas.DETALHES_ORCAMENTO.rota,
             arguments = listOf(
                 navArgument(Rotas.ARG_ORCAMENTO_ID) {
-                    type = NavType.StringType
+                    type = NavType.LongType
                 },
             ),
         ) {
@@ -79,8 +106,8 @@ fun OrcaConfortNavHost(
                 onBackClick = {
                     navController.popBackStack()
                 },
-                onEditarOrcamentoClick = {
-                    navController.navigate(Rotas.NOVO_ORCAMENTO.rota)
+                onEditarOrcamentoClick = { orcamentoId ->
+                    navController.navigate(Rotas.editarOrcamento(orcamentoId))
                 },
             )
         }

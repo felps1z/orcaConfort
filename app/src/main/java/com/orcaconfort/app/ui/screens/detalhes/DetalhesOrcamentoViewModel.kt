@@ -3,13 +3,30 @@ package com.orcaconfort.app.ui.screens.detalhes
 import androidx.annotation.DrawableRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.orcaconfort.app.R
+import com.orcaconfort.app.core.util.Formatadores
+import com.orcaconfort.app.domain.model.CategoriaMaterial
+import com.orcaconfort.app.domain.model.ItemMaterialOrcamento
+import com.orcaconfort.app.domain.model.ModeloSofa
+import com.orcaconfort.app.domain.model.Orcamento
+import com.orcaconfort.app.domain.model.StatusOrcamento
+import com.orcaconfort.app.domain.model.TipoServico
+import com.orcaconfort.app.domain.repository.OrcamentoRepository
+import com.orcaconfort.app.domain.usecase.GerarPdfOrcamentoUseCase
+import com.orcaconfort.app.domain.usecase.PdfOrcamentoGerado
+import com.orcaconfort.app.ui.navigation.Rotas
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/** Mapeamento do modelo de domínio para a imagem ilustrativa do estofado. */
 enum class ModeloSofaIlustrativo(
     val tituloModelo: String,
     @param:DrawableRes val imagemRes: Int,
@@ -25,7 +42,15 @@ enum class ModeloSofaIlustrativo(
     MODULAR(
         tituloModelo = "Sofá modular",
         imagemRes = R.drawable.img_sofa_modular,
-    ),
+    );
+
+    companion object {
+        fun fromDominio(modelo: ModeloSofa): ModeloSofaIlustrativo = when (modelo) {
+            ModeloSofa.FIXO -> FIXO
+            ModeloSofa.RETRATIL -> RETRATIL
+            ModeloSofa.MODULAR -> MODULAR
+        }
+    }
 }
 
 data class MaterialDetalheUi(
@@ -40,9 +65,10 @@ data class LinhaFinanceiraUi(
 )
 
 data class DetalhesOrcamentoUiState(
-    val id: String,
+    val id: Long,
+    val codigoFormatado: String,
     val clienteNome: String,
-    val status: String,
+    val status: StatusOrcamento,
     val tipoServico: String,
     val dataOrcamento: String,
     val dataEntregaPrevista: String,
@@ -63,188 +89,206 @@ data class DetalhesOrcamentoUiState(
     val legendaValorFinal: String,
 )
 
+sealed interface DetalhesScreenState {
+    data object Carregando : DetalhesScreenState
+    data object NaoEncontrado : DetalhesScreenState
+    data class Sucesso(val detalhes: DetalhesOrcamentoUiState) : DetalhesScreenState
+}
+
+/**
+ * ViewModel da tela de Detalhes do Orçamento.
+ *
+ * Observa o orçamento completo (cabeçalho, peças e snapshot de itens) no banco local Room
+ * e permite atualizar o [StatusOrcamento] diretamente pelo badge de status.
+ */
 @HiltViewModel
 class DetalhesOrcamentoViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    private val orcamentoRepository: OrcamentoRepository,
+    private val gerarPdfOrcamentoUseCase: GerarPdfOrcamentoUseCase,
 ) : ViewModel() {
 
-    private val orcamentoId: String = savedStateHandle["orcamentoId"] ?: "024"
+    private val orcamentoId: Long = savedStateHandle[Rotas.ARG_ORCAMENTO_ID] ?: -1L
 
-    private val _uiState = MutableStateFlow(detalhesMockPorId(orcamentoId))
-    val uiState: StateFlow<DetalhesOrcamentoUiState> = _uiState.asStateFlow()
-}
+    private var orcamentoAtual: Orcamento? = null
 
-internal fun detalhesMockPorId(id: String): DetalhesOrcamentoUiState =
-    when (id) {
-        "023" -> DetalhesOrcamentoUiState(
-            id = "023",
-            clienteNome = "Carlos Lima",
-            status = "Aprovado",
-            tipoServico = "Sofá novo",
-            dataOrcamento = "05/11/2026",
-            dataEntregaPrevista = "24/11/2026",
-            modelo = ModeloSofaIlustrativo.FIXO,
-            dimensoes = "200 × 88 × 85 cm",
-            tecidoECor = "Suede liso bege",
-            almofadas = "Sim • 2 unidades",
-            observacoesAcordadas = "Conjunto fixo com acabamento em pesponto reforçado e pés em madeira escura.",
-            materiais = listOf(
-                MaterialDetalheUi("Tecido • Suede liso bege", "14 m"),
-                MaterialDetalheUi("Espuma • 1 cm", "2 m"),
-                MaterialDetalheUi("Espuma • 2 cm", "3 m"),
-                MaterialDetalheUi("Espuma • 3 cm", "4 m"),
-                MaterialDetalheUi("Fibra siliconada", "3 kg"),
-                MaterialDetalheUi("Percinta elástica", "18 m"),
-                MaterialDetalheUi("Tábuas de madeira", "10 m", "Estrutura completa nova"),
-                MaterialDetalheUi("Duratex / Compensado", "3 folhas"),
-                MaterialDetalheUi("Molas", "12 un."),
-                MaterialDetalheUi("Pés", "8 un."),
-            ),
-            notaMateriais = "Quantidades conforme o orçamento. Itens mantidos não representam material novo.",
+    private val _gerandoPdf = MutableStateFlow(false)
+    val gerandoPdf: StateFlow<Boolean> = _gerandoPdf.asStateFlow()
+
+    val screenState: StateFlow<DetalhesScreenState> =
+        orcamentoRepository.observarOrcamentoPorId(orcamentoId)
+            .map { orcamento ->
+                orcamentoAtual = orcamento
+                if (orcamento == null) {
+                    DetalhesScreenState.NaoEncontrado
+                } else {
+                    DetalhesScreenState.Sucesso(mapearParaUi(orcamento))
+                }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = DetalhesScreenState.Carregando,
+            )
+
+    fun atualizarStatus(novoStatus: StatusOrcamento) {
+        if (orcamentoId <= 0L) return
+        viewModelScope.launch {
+            orcamentoRepository.atualizarStatus(orcamentoId, novoStatus)
+        }
+    }
+
+    fun gerarPdf(
+        onSucesso: (PdfOrcamentoGerado) -> Unit,
+        onErro: (String) -> Unit,
+    ) {
+        if (_gerandoPdf.value) return
+        viewModelScope.launch {
+            _gerandoPdf.value = true
+            val orcamento = orcamentoAtual ?: orcamentoRepository.buscarOrcamentoPorId(orcamentoId)
+            if (orcamento == null) {
+                _gerandoPdf.value = false
+                onErro("Orçamento não encontrado para gerar o PDF.")
+                return@launch
+            }
+
+            val resultado = gerarPdfOrcamentoUseCase(orcamento)
+            _gerandoPdf.value = false
+            resultado.fold(
+                onSuccess = onSucesso,
+                onFailure = { erro ->
+                    onErro(erro.message ?: "Não foi possível gerar o PDF do orçamento.")
+                },
+            )
+        }
+    }
+
+    private fun mapearParaUi(orcamento: Orcamento): DetalhesOrcamentoUiState {
+        val isReforma = orcamento.tipoServico == TipoServico.REFORMA
+
+        val dimensoesTexto = when {
+            orcamento.sofa.pecas.isEmpty() -> "Não informadas"
+            orcamento.sofa.pecas.size == 1 -> {
+                val p = orcamento.sofa.pecas.first()
+                "${Formatadores.formatarQuantidade(p.larguraCm)} × ${Formatadores.formatarQuantidade(p.profundidadeCm)} × ${Formatadores.formatarQuantidade(p.alturaCm)} cm"
+            }
+            else -> orcamento.sofa.pecas.joinToString("\n") { p ->
+                "Peça ${p.ordem}: ${Formatadores.formatarQuantidade(p.larguraCm)} × ${Formatadores.formatarQuantidade(p.profundidadeCm)} × ${Formatadores.formatarQuantidade(p.alturaCm)} cm"
+            }
+        }
+
+        val tecidoECor = listOfNotNull(
+            orcamento.sofa.nomeTecidoSelecionado.takeIf { it.isNotBlank() },
+            orcamento.sofa.corTecido.lowercase().takeIf { it.isNotBlank() },
+        ).joinToString(" ").ifBlank { "Não informado" }
+
+        val almofadasTexto = if (orcamento.sofa.possuiAlmofadas) {
+            val qtd = orcamento.sofa.qtdAlmofadas
+            val unidade = if (qtd == 1) "unidade" else "unidades"
+            "Sim • $qtd $unidade"
+        } else {
+            "Não"
+        }
+
+        val materiaisUi = orcamento.itens.map { item ->
+            mapearMaterialDetalhe(item, isReforma)
+        }
+
+        val custoTecido = orcamento.itens
+            .filter { it.categoria == CategoriaMaterial.TECIDO }
+            .sumOf { it.custoTotal }
+        val custoEspumaEnchimento = orcamento.itens
+            .filter { it.categoria == CategoriaMaterial.ESPUMA || it.categoria == CategoriaMaterial.FIBRA }
+            .sumOf { it.custoTotal }
+        val custoEstruturaAdicionais = orcamento.itens
+            .filter {
+                it.categoria != CategoriaMaterial.TECIDO &&
+                    it.categoria != CategoriaMaterial.ESPUMA &&
+                    it.categoria != CategoriaMaterial.FIBRA
+            }
+            .sumOf { it.custoTotal }
+
+        val fin = orcamento.financeiro
+        val ajuste = fin.ajusteComercial
+        val linhaAjuste = ajuste?.let { valorAjuste ->
+            val valorTexto = if (valorAjuste > 0.0) {
+                "+ ${Formatadores.formatarMoeda(valorAjuste)}"
+            } else {
+                Formatadores.formatarMoeda(valorAjuste)
+            }
+            LinhaFinanceiraUi("Ajuste comercial", valorTexto)
+        }
+
+        val legendaFinal = if (linhaAjuste != null) {
+            "Valor final com ajuste comercial aplicado"
+        } else {
+            "Valor final conforme cálculo dos materiais e serviços"
+        }
+
+        return DetalhesOrcamentoUiState(
+            id = orcamento.id,
+            codigoFormatado = Formatadores.formatarCodigoOrcamento(orcamento.id),
+            clienteNome = orcamento.cliente.nome,
+            status = orcamento.status,
+            tipoServico = orcamento.tipoServico.tituloExibicao,
+            dataOrcamento = Formatadores.formatarData(orcamento.criadoEm),
+            dataEntregaPrevista = Formatadores.formatarData(orcamento.cliente.dataEntregaTimestamp),
+            modelo = ModeloSofaIlustrativo.fromDominio(orcamento.sofa.modelo),
+            dimensoes = dimensoesTexto,
+            tecidoECor = tecidoECor,
+            almofadas = almofadasTexto,
+            observacoesAcordadas = orcamento.cliente.observacoes.ifBlank { "Sem observações registradas." },
+            materiais = materiaisUi,
+            notaMateriais = "Quantidades conforme o orçamento salvo (preços congelados na data de emissão). Itens zerados não representam material novo.",
             itensCustosMateriais = listOf(
-                LinhaFinanceiraUi("Total em tecido", "R$ 448,00"),
-                LinhaFinanceiraUi("Espuma / enchimento*", "R$ 480,00"),
-                LinhaFinanceiraUi("Estrutura / materiais adicionais", "R$ 560,00"),
+                LinhaFinanceiraUi("Total em tecido", Formatadores.formatarMoeda(custoTecido)),
+                LinhaFinanceiraUi("Espuma / enchimento", Formatadores.formatarMoeda(custoEspumaEnchimento)),
+                LinhaFinanceiraUi("Estrutura / materiais adicionais", Formatadores.formatarMoeda(custoEstruturaAdicionais)),
             ),
-            subtotalMateriais = LinhaFinanceiraUi("Subtotal dos materiais", "R$ 1.488,00"),
+            subtotalMateriais = LinhaFinanceiraUi(
+                "Subtotal dos materiais",
+                Formatadores.formatarMoeda(fin.subtotalMateriais),
+            ),
             itensCustosServicos = listOf(
-                LinhaFinanceiraUi("Reserva para extras • 10%", "R$ 148,80"),
-                LinhaFinanceiraUi("Mão de obra • 4 × R$ 180", "R$ 720,00"),
-                LinhaFinanceiraUi("Frete", "R$ 120,00"),
+                LinhaFinanceiraUi(
+                    "Reserva para extras • ${Formatadores.formatarQuantidade(fin.margemExtrasPercentual)}%",
+                    Formatadores.formatarMoeda(fin.valorMargemExtras),
+                ),
+                LinhaFinanceiraUi(
+                    "Mão de obra • ${Formatadores.formatarQuantidade(fin.diasTrabalhados)} × ${Formatadores.formatarMoeda(fin.valorDiaria)}",
+                    Formatadores.formatarMoeda(fin.totalMaoDeObra),
+                ),
+                LinhaFinanceiraUi(
+                    "Frete",
+                    Formatadores.formatarMoeda(fin.custoFrete),
+                ),
             ),
-            totalCalculado = LinhaFinanceiraUi("Total calculado", "R$ 2.476,80"),
-            ajusteComercial = LinhaFinanceiraUi("Ajuste comercial", "– R$ 76,80"),
-            notaFinanceira = "*Espuma / enchimento: saldo do total de materiais informado, incluindo R$ 84,00 de fibra. Rateio a confirmar.",
-            valorTotalFinal = "R$ 2.400,00",
-            legendaValorFinal = "Valor final com ajuste comercial aplicado",
-        )
-
-        "022" -> DetalhesOrcamentoUiState(
-            id = "022",
-            clienteNome = "Marina Costa",
-            status = "Produção",
-            tipoServico = "Sofá novo",
-            dataOrcamento = "01/11/2026",
-            dataEntregaPrevista = "12/11/2026",
-            modelo = ModeloSofaIlustrativo.MODULAR,
-            dimensoes = "280 × 190 × 88 cm",
-            tecidoECor = "Veludo cinza claro",
-            almofadas = "Sim • 6 unidades",
-            observacoesAcordadas = "Sofá modular em L com 4 módulos acopláveis e costura capitonê nos assentos.",
-            materiais = listOf(
-                MaterialDetalheUi("Tecido • Veludo cinza claro", "24 m"),
-                MaterialDetalheUi("Espuma • 1 cm", "3 m"),
-                MaterialDetalheUi("Espuma • 2 cm", "4 m"),
-                MaterialDetalheUi("Espuma • 3 cm", "6 m"),
-                MaterialDetalheUi("Fibra siliconada", "7 kg"),
-                MaterialDetalheUi("Percinta elástica", "26 m"),
-                MaterialDetalheUi("Tábuas de madeira", "16 m", "Estrutura modular independente"),
-                MaterialDetalheUi("Duratex / Compensado", "5 folhas"),
-                MaterialDetalheUi("Molas", "20 un."),
-                MaterialDetalheUi("Pés", "16 un."),
+            totalCalculado = LinhaFinanceiraUi(
+                "Total calculado",
+                Formatadores.formatarMoeda(fin.totalCalculado),
             ),
-            notaMateriais = "Quantidades conforme o orçamento. Itens mantidos não representam material novo.",
-            itensCustosMateriais = listOf(
-                LinhaFinanceiraUi("Total em tecido", "R$ 1.392,00"),
-                LinhaFinanceiraUi("Espuma / enchimento*", "R$ 920,00"),
-                LinhaFinanceiraUi("Estrutura / materiais adicionais", "R$ 890,00"),
-            ),
-            subtotalMateriais = LinhaFinanceiraUi("Subtotal dos materiais", "R$ 3.202,00"),
-            itensCustosServicos = listOf(
-                LinhaFinanceiraUi("Reserva para extras • 10%", "R$ 320,20"),
-                LinhaFinanceiraUi("Mão de obra • 5 × R$ 180", "R$ 900,00"),
-                LinhaFinanceiraUi("Frete", "R$ 180,00"),
-            ),
-            totalCalculado = LinhaFinanceiraUi("Total calculado", "R$ 4.602,20"),
-            ajusteComercial = LinhaFinanceiraUi("Ajuste comercial", "+ R$ 47,80"),
-            notaFinanceira = "*Espuma / enchimento: saldo do total de materiais informado, incluindo R$ 196,00 de fibra. Rateio a confirmar.",
-            valorTotalFinal = "R$ 4.650,00",
-            legendaValorFinal = "Valor final com ajuste comercial aplicado",
-        )
-
-        "021" -> DetalhesOrcamentoUiState(
-            id = "021",
-            clienteNome = "Paulo Alves",
-            status = "Concluído",
-            tipoServico = "Reforma",
-            dataOrcamento = "22/10/2026",
-            dataEntregaPrevista = "02/11/2026",
-            modelo = ModeloSofaIlustrativo.FIXO,
-            dimensoes = "185 × 85 × 82 cm",
-            tecidoECor = "Suede liso marrom",
-            almofadas = "Não",
-            observacoesAcordadas = "Troca completa de tecido e reforço nas percintas dos assentos.",
-            materiais = listOf(
-                MaterialDetalheUi("Tecido • Suede liso marrom", "10 m"),
-                MaterialDetalheUi("Espuma • 1 cm", "1 m"),
-                MaterialDetalheUi("Espuma • 2 cm", "2 m"),
-                MaterialDetalheUi("Espuma • 3 cm", "2 m"),
-                MaterialDetalheUi("Fibra siliconada", "2 kg"),
-                MaterialDetalheUi("Percinta elástica", "12 m"),
-                MaterialDetalheUi("Tábuas de madeira", "0 m", "Estrutura original mantida"),
-                MaterialDetalheUi("Duratex / Compensado", "0 folhas", "Chapas originais mantidas"),
-                MaterialDetalheUi("Molas", "0 un.", "Molas originais mantidas"),
-                MaterialDetalheUi("Pés", "4 un.", "Pés originais mantidos"),
-            ),
-            notaMateriais = "Quantidades conforme o orçamento. Itens mantidos não representam material novo.",
-            itensCustosMateriais = listOf(
-                LinhaFinanceiraUi("Total em tecido", "R$ 320,00"),
-                LinhaFinanceiraUi("Espuma / enchimento*", "R$ 260,00"),
-                LinhaFinanceiraUi("Estrutura / materiais adicionais", "R$ 140,00"),
-            ),
-            subtotalMateriais = LinhaFinanceiraUi("Subtotal dos materiais", "R$ 720,00"),
-            itensCustosServicos = listOf(
-                LinhaFinanceiraUi("Reserva para extras • 10%", "R$ 72,00"),
-                LinhaFinanceiraUi("Mão de obra • 2 × R$ 180", "R$ 360,00"),
-                LinhaFinanceiraUi("Frete", "R$ 120,00"),
-            ),
-            totalCalculado = LinhaFinanceiraUi("Total calculado", "R$ 1.272,00"),
-            ajusteComercial = LinhaFinanceiraUi("Ajuste comercial", "+ R$ 48,00"),
-            notaFinanceira = "*Espuma / enchimento: saldo do total de materiais informado, incluindo R$ 56,00 de fibra. Rateio a confirmar.",
-            valorTotalFinal = "R$ 1.320,00",
-            legendaValorFinal = "Valor final com ajuste comercial aplicado",
-        )
-
-        else -> DetalhesOrcamentoUiState(
-            id = "024",
-            clienteNome = "Ana Souza",
-            status = "Pendente",
-            tipoServico = "Reforma",
-            dataOrcamento = "Não informada",
-            dataEntregaPrevista = "20/11/2026",
-            modelo = ModeloSofaIlustrativo.RETRATIL,
-            dimensoes = "220 × 95 × 90 cm",
-            tecidoECor = "Linho cinza",
-            almofadas = "Sim • 4 unidades",
-            observacoesAcordadas = "Reformar assentos e trocar o tecido.\nManter a estrutura original.",
-            materiais = listOf(
-                MaterialDetalheUi("Tecido • Linho cinza", "12 m"),
-                MaterialDetalheUi("Espuma • 1 cm", "1,5 m"),
-                MaterialDetalheUi("Espuma • 2 cm", "2 m"),
-                MaterialDetalheUi("Espuma • 3 cm", "3 m"),
-                MaterialDetalheUi("Fibra siliconada", "4 kg"),
-                MaterialDetalheUi("Percinta elástica", "16 m"),
-                MaterialDetalheUi("Tábuas de madeira", "6 m", "Unidades não informadas"),
-                MaterialDetalheUi("Duratex / Compensado", "0 folhas", "Chapas originais mantidas"),
-                MaterialDetalheUi("Molas", "0 un.", "Molas originais mantidas"),
-                MaterialDetalheUi("Pés", "Não informado", "Quantidade em unidades a confirmar"),
-            ),
-            notaMateriais = "Quantidades conforme o orçamento. Itens mantidos não representam material novo.",
-            itensCustosMateriais = listOf(
-                LinhaFinanceiraUi("Total em tecido", "R$ 540,00"),
-                LinhaFinanceiraUi("Espuma / enchimento*", "R$ 392,00"),
-                LinhaFinanceiraUi("Estrutura / materiais adicionais", "R$ 204,00"),
-            ),
-            subtotalMateriais = LinhaFinanceiraUi("Subtotal dos materiais", "R$ 1.136,00"),
-            itensCustosServicos = listOf(
-                LinhaFinanceiraUi("Reserva para extras • 10%", "R$ 113,60"),
-                LinhaFinanceiraUi("Mão de obra • 3 × R$ 180", "R$ 540,00"),
-                LinhaFinanceiraUi("Frete", "R$ 120,00"),
-            ),
-            totalCalculado = LinhaFinanceiraUi("Total calculado", "R$ 1.909,60"),
-            ajusteComercial = LinhaFinanceiraUi("Ajuste comercial", "– R$ 59,60"),
-            notaFinanceira = "*Espuma / enchimento: saldo do total de materiais informado, incluindo R$ 112,00 de fibra. Rateio a confirmar.",
-            valorTotalFinal = "R$ 1.850,00",
-            legendaValorFinal = "Valor final com ajuste comercial aplicado",
+            ajusteComercial = linhaAjuste,
+            notaFinanceira = null,
+            valorTotalFinal = Formatadores.formatarMoeda(fin.valorFinalSalvo),
+            legendaValorFinal = legendaFinal,
         )
     }
+
+    private fun mapearMaterialDetalhe(
+        item: ItemMaterialOrcamento,
+        isReforma: Boolean,
+    ): MaterialDetalheUi {
+        val qtdTexto = "${Formatadores.formatarQuantidade(item.quantidade)} ${item.unidade}"
+        val observacao = when {
+            item.quantidade <= 0.0 && isReforma -> "Item original mantido / não incluído"
+            item.quantidade <= 0.0 -> "Não utilizado neste orçamento"
+            item.editadoManualmente -> "Quantidade ajustada manualmente"
+            else -> null
+        }
+        return MaterialDetalheUi(
+            nome = item.descricao,
+            quantidade = qtdTexto,
+            observacao = observacao,
+        )
+    }
+}

@@ -6,7 +6,7 @@
 [versions]
 # Build (compatibilidade: AGP 9.3 exige Gradle >= 9.6.0 e JDK 17;
 # Hilt >= 2.59 exige AGP >= 9.0 — ver release notes do Dagger)
-agp = "9.5.1"
+agp = "9.5.2"
 kotlin = "2.4.21"
 ksp = "2.3.13"                       # processador de anotações (Hilt e Room usam KSP)
 gradle = "9.6.1"                     # versão do wrapper (gradle/wrapper/gradle-wrapper.properties)
